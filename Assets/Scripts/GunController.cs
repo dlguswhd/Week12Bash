@@ -10,6 +10,11 @@ public class GunController : MonoBehaviour {
 	private float currentFireRate;
 
 	private bool isReload = false;
+	private bool isFineSightMode = false;
+
+[SerializeField]
+	private Vector3 originPos;
+
 
 	private AudioSource audioSource;
 
@@ -22,7 +27,8 @@ public class GunController : MonoBehaviour {
 
 		GunFireRateCalc();
 		TryFire();
-
+		TryReload();
+		TryFineSight();
 	}
 
 	private void GunFireRateCalc()
@@ -46,7 +52,11 @@ public class GunController : MonoBehaviour {
 			if (currentGun.currentBulletCount > 0)
 				Shoot();
 			else
+            {
+				CancelFineSight();
 				StartCoroutine(ReloadCoroutine());
+			}
+
 		}
     }
 
@@ -56,7 +66,20 @@ public class GunController : MonoBehaviour {
 		currentFireRate = currentGun.fireRate;
 		PlaySE(currentGun.fire_Sound);
 		currentGun.muzzleFlash.Play();
+
+		StopAllCoroutines();
+		StartCoroutine(RetroActiomCoroutine());
+
 		Debug.Log("총알 발사함");
+    } 
+
+	private void TryReload()
+    {
+		if(Input.GetKeyDown(KeyCode.R) && !isReload && currentGun.currentBulletCount < currentGun.reloadBulletCount)
+        {
+			CancelFineSight();
+			StartCoroutine(ReloadCoroutine());
+        }
     }
 
 	IEnumerator ReloadCoroutine()
@@ -64,6 +87,9 @@ public class GunController : MonoBehaviour {
 		if(currentGun.carryBulletCount > 0)
         {
 			currentGun.anim.SetTrigger("Reload");
+
+			currentGun.carryBulletCount += currentGun.currentBulletCount;
+			currentGun.currentBulletCount = 0;
 
 			isReload = true;
 			yield return new WaitForSeconds(currentGun.reloadTime);
@@ -80,10 +106,99 @@ public class GunController : MonoBehaviour {
             }
 
 			isReload = false;
-
+        }
+		else
+        {
+			Debug.Log("소유한 총알이 없습니다.");
         }
     }
 
+	private void TryFineSight()
+    {
+		if(Input.GetButtonDown("Fire2") && !isReload)
+        {
+			FineSight();
+        }
+    }
+
+	public void CancelFineSight()
+    {
+		if (isFineSightMode)
+			FineSight();
+    }
+
+	private void FineSight()
+    {
+		isFineSightMode = !isFineSightMode;
+		currentGun.anim.SetBool("FineSightMode", isFineSightMode);
+
+		if(isFineSightMode)
+        {
+			StopAllCoroutines();
+			StartCoroutine(FineSightActivateCoroutine());
+        }
+		else
+        {
+			StopAllCoroutines();
+			StartCoroutine(FineSightDeactivateCoroutine());
+		}
+    }
+
+	IEnumerator FineSightActivateCoroutine()
+	{
+		while (currentGun.transform.localPosition != currentGun.fineSightOriginPos)
+		{
+			currentGun.transform.localPosition = Vector3.Lerp(currentGun.transform.localPosition, currentGun.fineSightOriginPos, 0.2f);
+			yield return null;
+		}
+	}
+    IEnumerator FineSightDeactivateCoroutine()
+	{
+		while (currentGun.transform.localPosition != originPos)
+		{
+			currentGun.transform.localPosition = Vector3.Lerp(currentGun.transform.localPosition, originPos, 0.2f);
+			yield return null;
+		}
+	}
+
+	IEnumerator RetroActiomCoroutine()
+    {
+		Vector3 recoilBack = new Vector3(currentGun.retroActionForce, originPos.y , originPos.z);
+		Vector3 retroActionRecoilBack = new Vector3(currentGun.retroActionForce, currentGun.fineSightOriginPos.y, currentGun.fineSightOriginPos.z);
+   
+		if(!isFineSightMode)
+        {
+			currentGun.transform.localPosition = originPos;
+
+			while(currentGun.transform.localPosition.x <= currentGun.retroActionForce - 0.02f)
+            {
+				currentGun.transform.localPosition = Vector3.Lerp(currentGun.transform.localPosition, recoilBack, 0.4f);
+				yield return null;
+            }
+
+			while(currentGun.transform.localPosition != originPos)
+            {
+				currentGun.transform.localPosition = Vector3.Lerp(currentGun.transform.localPosition, originPos, 0.1f);
+				yield return null;
+			}
+        }
+		else
+        {
+			currentGun.transform.localPosition = currentGun.fineSightOriginPos;
+
+			while (currentGun.transform.localPosition.x <= currentGun.retroActionFineSightForce - 0.02f)
+			{
+				currentGun.transform.localPosition = Vector3.Lerp(currentGun.transform.localPosition, retroActionRecoilBack, 0.4f);
+				yield return null;
+			}
+
+			while (currentGun.transform.localPosition != currentGun.fineSightOriginPos)
+			{
+				currentGun.transform.localPosition = Vector3.Lerp(currentGun.transform.localPosition, originPos, 0.1f);
+				yield return null;
+			}
+		}
+	}
 	private void PlaySE(AudioClip _clip)
     {
 		audioSource.clip = _clip;
